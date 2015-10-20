@@ -62,6 +62,10 @@
 #include <nuttx/device_battery.h>
 #endif
 
+#ifdef CONFIG_ARA_BRIDGE_HAVE_WDM
+#include <nuttx/device_wdm.h>
+#endif
+
 #ifdef CONFIG_ARCH_CHIP_DEVICE_SDIO
 #include <nuttx/device_sdio_board.h>
 #define SD_POWER_EN_PIN    9 /* GPIO 9 */
@@ -175,6 +179,14 @@ static struct device devices[] = {
         .resource_count = ARRAY_SIZE(sdio_board_resources),
     },
 #endif
+#ifdef CONFIG_ARA_BRIDGE_HAVE_WDM
+    {
+        .type           = DEVICE_TYPE_WDM_DEVICE,
+        .name           = "ara_bridge_wdm",
+        .desc           = "Ara Bridge WDM Device Driver",
+        .id             = 0,
+    },
+#endif
 };
 
 static struct device_table bdb_device_table = {
@@ -207,6 +219,10 @@ static void bdb_driver_register(void)
 #ifdef CONFIG_ARCH_CHIP_DEVICE_SDIO
     extern struct device_driver sdio_board_driver;
     device_register_driver(&sdio_board_driver);
+#endif
+#ifdef CONFIG_ARA_BRIDGE_HAVE_WDM
+    extern struct device_driver wdm_driver;
+    device_register_driver(&wdm_driver);
 #endif
 }
 #endif
