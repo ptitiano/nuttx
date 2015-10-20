@@ -72,6 +72,11 @@ config ARA_BRIDGE_HAVE_BATTERY
 	---help---
 		BATTERY Driver
 
+config ARA_BRIDGE_HAVE_WDM
+	bool "WDM (Wake Detect Module) support for Board"
+	default n
+	select GPIO
+
 choice
 	prompt "Select a bridge firmware configuration"
 	depends on ARA_BRIDGE_HAVE_CAMERA || BOARD_HAVE_DISPLAY
