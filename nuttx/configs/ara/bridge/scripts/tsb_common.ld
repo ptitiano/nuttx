@@ -51,6 +51,7 @@ SECTIONS
         *(.got)
         *(.gcc_except_table)
         *(.gnu.linkonce.r.*)
+        *(.asmpmsec)
         _etext = ABSOLUTE(.);
     } > sram AT > rom
 
