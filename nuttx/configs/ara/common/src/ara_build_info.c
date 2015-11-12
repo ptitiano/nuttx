@@ -30,6 +30,8 @@
 #include <debug.h>
 #include <ara_build_info.h>
 #include <ara_build_info_priv.h>
+#include "up_arch.h"
+#include <tsb_pmu.h>
 
 #ifdef CONFIG_ARCH_LOWPUTC
 #define early_dbg(fmt, ...) lowsyslog(fmt, ##__VA_ARGS__)
@@ -41,6 +43,15 @@ const char __ara_build_target[] ROMSTRING = {ARA_BUILD_TARGET};
 const char __ara_git_version[]  ROMSTRING = {ARA_FW_VERSION};
 
 void ara_show_build_info(void) {
+    uint32_t bootret;
+
     early_dbg("__ara_build_target '%s'\n", __ara_build_target);
     early_dbg("__ara_git_version  '%s'\n", __ara_git_version);
+
+    bootret = getreg32(TSB_PMU_BOOTRET_O);
+    if (bootret) {
+        early_dbg("\n\nBOOTRET=%u => Standby boot\n\n", bootret);
+    } else {
+        early_dbg("\n\nBOOTRET=%u => cold boot\n\n", bootret);
+    }
 }
