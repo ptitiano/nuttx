@@ -34,6 +34,7 @@
 #include <errno.h>
 
 #include <nuttx/config.h>
+#include <debug.h>
 #include <nuttx/device.h>
 #include <nuttx/device_table.h>
 #include <nuttx/device_hid.h>
@@ -224,6 +225,16 @@ static void board_camera_init(void)
 #endif
 }
 
+/**
+ * @brief   Board-specific power management initialization.
+ */
+static void board_pm_init(void)
+{
+#ifdef CONFIG_PM
+    lldbg("Board PM initialized.\n");
+#endif
+}
+
 static void sdb_fixups(void)
 {
     /**
@@ -290,4 +301,5 @@ void ara_module_init(void)
 
     board_display_init();
     board_camera_init();
+    board_pm_init();
 }
