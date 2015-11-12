@@ -88,6 +88,9 @@
 #define HSIC_BASE       0x40040000
 #define HSIC_SIZE       0x1000
 
+#define PMU_BASE	0x40090000
+#define PMU_SIZE	0x1000
+
 #define CM3UP_BASE      0xE000E000
 #define CM3UP_SIZE      0x1000
 
