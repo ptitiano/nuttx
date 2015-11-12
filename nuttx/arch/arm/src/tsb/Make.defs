@@ -124,3 +124,14 @@ endif
 ifeq ($(CONFIG_ARCH_CHIP_DEVICE_SDIO),y)
 CHIP_CSRCS += tsb_sdio.c
 endif
+
+ifeq ($(CONFIG_PM),y)
+CHIP_CSRCS += tsb_pminitialize.c
+CHIP_CSRCS += tsb_pmsleep.c
+CHIP_CSRCS += tsb_pmstandby.c
+CHIP_CSRCS += tsb_pmoff.c
+ASFLAGS += -fpic
+ifeq ($(CONFIG_TSB_CHIP_REV_ES2),y)
+CMN_ASRCS  += tsb_pm_es2.S
+endif
+endif
