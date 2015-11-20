@@ -157,7 +157,7 @@ static int wdm_dev_open(struct device *dev)
     gpio_activate(info->powerdown_gpio);
     gpio_activate(info->wake_frame_gpio);
     gpio_activate(info->wake_mod_gpio);
-    gpio_direction_out(info->powerdown_gpio, 1);
+    gpio_direction_out(info->powerdown_gpio, 0);
     gpio_direction_out(info->wake_frame_gpio, 0);
     gpio_direction_in(info->wake_mod_gpio);
 
