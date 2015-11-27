@@ -29,12 +29,14 @@
 .global bootstrap
 .extern _stext_lma, _stext, _text_size
 .extern _bootstrap_lma, _bootstrap_vma, _bootstrap_size
+.extern __start, tsb_resume_addr
 .syntax unified
 .thumb
 
+#include "tsb_pmu.h"
+
 .section .bootstrap, "ax"
 .align 4
-
 .thumb_func
 copy_to_ram:
     ldr r3, [r1], #4
@@ -51,8 +53,79 @@ _copy_to_ram:
 .section .bootstrap.loader
 .thumb_func
 bootstrap:
-    push {r4, lr}
+    ldr r1, pmu_bootret_o
+    ldr r0, [r1]
+    tst r0, #1
+    bne resume_from_standby
+    b cold_boot
 
+resume_from_standby:
+    /* As per ARA ES2 GPBridge Specs Figure 5-6 ROM sequence */
+    /* 1. Wait 0.1us. 1 CPU clock cycle = 10.4ns (@96MHz) */
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    /* 2. WRITE SRAMRET = 0 */
+    ldr r1, pmu_ret_sram_ret
+    ldr r0, pmu_ret_sram_ret_val
+    str r0, [r1]
+
+    /* 3. Wait 0.1us. 1 CPU clock cycle = 10.4ns (@96MHz) */
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    /* 3. WRITE SRAMCGATE = 1 */
+    ldr r1, pmu_ret_sram_clk_cont
+    ldr r0, pmu_ret_sram_clk_cont_val
+    str r0, [r1]
+
+    /* 4. Wait 5 SramClk cycles or more (same clock speed as CPU) */
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+
+    /* 5. WRITE SRAMCEN = 0 */
+    ldr r1, pmu_ret_sram_cen_cont
+    ldr r0, pmu_ret_sram_cen_cont_val
+    str r0, [r1]
+
+    /* 6. Unlock latch state of IO cells via Iso_for_io_en register */
+    ldr r1, pmu_iso_for_io_en
+    ldr r0, pmu_iso_for_io_en_val
+    str r0, [r1]
+
+    /* 7. CLR BOOTRET = 0 */
+    ldr r1, pmu_bootret_o
+    ldr r0, pmu_bootret_o_val
+    str r0, [r1]
+
+    /* 8. Return to saved resume addr */
+    ldr r1, =tsb_resume_addr
+    ldr r2, [r1]
+    bx  r2
+
+cold_boot:
     ldr r0, =_bootstrap_lma
     ldr r1, =_bootstrap_size
     ldr r2, =_bootstrap_vma
@@ -75,4 +148,30 @@ done_bootstrap_copy:
     orr r4, r4, #1
     blx r4
 
-    pop {r4, pc}
+    bl __start
+
+.align 4
+pmu_bootret_o:
+    .word TSB_PMU_BOOTRET_O
+pmu_bootret_o_val:
+    .word 0x00000001
+
+pmu_ret_sram_cen_cont:
+    .word TSB_PMU_RETSRAMCENCONT
+pmu_ret_sram_cen_cont_val:
+    .word 0x00000000
+
+pmu_ret_sram_clk_cont:
+    .word TSB_PMU_RETSRAMCLKCONT
+pmu_ret_sram_clk_cont_val:
+    .word 0x00000001
+
+pmu_ret_sram_ret:
+    .word TSB_PMU_RETSRAMRET
+pmu_ret_sram_ret_val:
+    .word 0x00000000
+
+pmu_iso_for_io_en:
+    .word TSB_PMU_ISO_FOR_IO_EN
+pmu_iso_for_io_en_val:
+    .word 0x00000000
