@@ -44,7 +44,7 @@
 .thumb
 .section .asmpmsec, "ax"
 .file "tsb_pm_es2.S"
-.globl up_standby, asmpmsec_start, asmpmsec_sz
+.globl up_standby, asmpmsec_start, asmpmsec_sz, tsb_resume_addr
 
 
 /**
@@ -56,8 +56,9 @@ asmpmsec_start:
 .thumb_func
 .type up_standby, function
 up_standby:
-    /* Disable interrupts (procedure cannot be interrupted/pre-empted)*/
-    cpsid i
+    /* Save the resume address (i.e. return address of the current function) */
+    ldr r1, resaddr
+    str lr, [r1]
 
     /* Standby Shutoff sequence, from ES3 specs rev100 section 4.1.4.4 */
     /* (0) Clear BOOTRET flag */
@@ -169,19 +170,6 @@ loop1_5us_done:
      */
     b .
 
-resume_from_standby:
-    /*
-     * FIXME:
-     * Implement the restore procedure.
-     */
-
-    /* Restore interrupts */
-    cpsie i
-
-    /* Return */
-    mov r0, #0
-    bx lr
-
 .align 4
 
 delay1_5us_val: /* 1 loop = 3 CPU cycles, 1 CPU clock cycle = 10.4ns (@96MHz) */
@@ -227,5 +215,14 @@ sysctrl_clockenable1:
 sysctrl_clockenable1_val:
     .word 0x00000004
 
+resaddr:
+    .word tsb_resume_addr
 asmpmsec_sz:
     .word . - asmpmsec_start
+
+
+.section .pmresumesec, "w"
+.global tsb_resume_addr
+.align 4
+tsb_resume_addr:
+    .word 0xDEADBEEF
