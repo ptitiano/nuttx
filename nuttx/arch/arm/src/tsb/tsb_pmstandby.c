@@ -69,8 +69,10 @@
 #include <sys/types.h>
 #include <string.h>
 #include <errno.h>
+#include <nuttx/irq.h>
 #include "chip.h"
-
+#include "nvic.h"
+#include "up_arch.h"
 
 int tsb_pmstandby(void)
 {
@@ -78,6 +80,11 @@ int tsb_pmstandby(void)
 #if defined(CONFIG_ARCH_CHIP_GPBRIDGE) && defined(CONFIG_TSB_CHIP_REV_ES2)
     extern uint32_t asmpmsec_start, asmpmsec_sz;
     int (* up_standby_bufram)(void) = (void *) (BUFRAM3_BASE | 0x00000001);
+    uint32_t regval;
+    irqstate_t flags;
+
+    /* Disable interrupts (procedure cannot be interrupted/pre-empted)*/
+    flags = irqsave();
 
     /*
      * Standby procedure must be copied to BufRam (BufRam not maintained)
@@ -91,8 +98,17 @@ int tsb_pmstandby(void)
      */
     memcpy((void *) BUFRAM3_BASE, &asmpmsec_start, asmpmsec_sz);
 
+    /* Set SLEEPDEEP bit of Cortex System Control Register */
+    regval  = getreg32(NVIC_SYSCON);
+    regval |= NVIC_SYSCON_SLEEPDEEP;
+    putreg32(regval, NVIC_SYSCON);
+
     /* Execute Standby procedure */
-    return up_standby_bufram();
+    up_standby_bufram();
+
+    irqrestore(flags);
+    return OK;
+
 #endif
     return -ENOSYS;
 #endif
