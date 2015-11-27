@@ -52,8 +52,6 @@ void __start(void) __attribute__((section(".bootstrap.loader")));
 
 void __start(void)
 {
-    extern void bootstrap(void);
-    bootstrap();
     copy_data_section_to_ram();
 
     tsb_start();
