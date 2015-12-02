@@ -36,6 +36,7 @@
 #include <nuttx/config.h>
 #include <arch/board/board.h>
 #include <nuttx/util.h>
+#include <nuttx/arch.h>
 
 #include "up_arch.h"
 #include "tsb_scm.h"
@@ -87,6 +88,8 @@ uint32_t tsb_clk_status(uint32_t clk)
 void tsb_reset(uint32_t rst)
 {
     scm_write(TSB_SCM_SOFTRESET0 + CLK_OFFSET(rst), CLK_MASK(rst));
+    /* Unipro requires Assert > 1us */
+    up_udelay(2);
     scm_write(TSB_SCM_SOFTRESETRELEASE0 + CLK_OFFSET(rst), CLK_MASK(rst));
 }
 
