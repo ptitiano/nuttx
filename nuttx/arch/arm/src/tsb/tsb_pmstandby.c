@@ -70,9 +70,11 @@
 #include <string.h>
 #include <errno.h>
 #include <nuttx/irq.h>
+#include <nuttx/arch.h>
 #include "chip.h"
 #include "nvic.h"
 #include "up_arch.h"
+#include "tsb_scm.h"
 
 int tsb_pmstandby(void)
 {
@@ -82,6 +84,19 @@ int tsb_pmstandby(void)
     int (* up_standby_bufram)(void) = (void *) (BUFRAM3_BASE | 0x00000001);
     uint32_t regval;
     irqstate_t flags;
+
+    /* (8) Enter UniPro into Hibern8 after step7. */
+    /* [HACK][FIXME] Reset Unipro IP to make sure it is not causing problem */
+    tsb_reset(TSB_RST_UNIPROSYS);
+
+    /*
+     * (9) CM3 waits until [UNIPRO_CLK_EN].UNIPRO_SYSCLKOFF_N becomes 0.
+     *
+     * SKIPPED, UNIPRO_CLK_EN register does not exist on ES2.
+     */
+
+    /* (10) CM3 sets [ClockGating1].CG_unipro_SysClk to 1. */
+    tsb_clk_disable(TSB_CLK_UNIPROSYS);
 
     /* Disable interrupts (procedure cannot be interrupted/pre-empted)*/
     flags = irqsave();
