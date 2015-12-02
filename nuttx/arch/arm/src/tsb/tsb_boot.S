@@ -55,6 +55,7 @@ _copy_to_ram:
 bootstrap:
     ldr r1, pmu_bootret_o
     ldr r0, [r1]
+    and r0, #1
     tst r0, #1
     bne resume_from_standby
     b cold_boot
