@@ -105,20 +105,14 @@ up_standby:
     /*
      * FIXME:
      * Unipro hibernation process skipped. Gating Unipro clocks directly.
+     * Done earlier in tsb_pmstandby().
      */
-    ldr r1, sysctrl_clockgating1
-    ldr r2, sysctrl_clockgating1_val
-    str r2, [r1]
 
     /*
      * (11) Clear [HB8CLK_EN].HB8CLK_EN to 0.
      *
      * Not found in ES2.0 register map.
-     * Used CLOCKENABLE1.CE_unipro_SysClk instead.
      */
-    ldr r1, sysctrl_clockenable1
-    ldr r2, sysctrl_clockenable1_val
-    str r2, [r1]
 
     /* (12) CM3 waits 1.5usec or more. */
     ldr r3, delay1_5us_val
@@ -204,16 +198,6 @@ pmu_iso_en:
     .word TSB_PMU_ISO_EN
 pmu_iso_en_val:
     .word 0x00000001
-
-sysctrl_clockgating1:
-    .word TSB_SYSCTL_CLOCKGATING1
-sysctrl_clockgating1_val:
-    .word 0x00000004
-
-sysctrl_clockenable1:
-    .word TSB_SYSCTL_CLOCKENABLE1
-sysctrl_clockenable1_val:
-    .word 0x00000004
 
 resaddr:
     .word tsb_resume_addr
