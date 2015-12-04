@@ -75,6 +75,8 @@
 #include "nvic.h"
 #include "up_arch.h"
 #include "tsb_scm.h"
+ #include <stdio.h>
+
 
 int tsb_pmstandby(void)
 {
@@ -101,6 +103,10 @@ int tsb_pmstandby(void)
     /* Disable interrupts (procedure cannot be interrupted/pre-empted)*/
     flags = irqsave();
 
+    /* Relocate vector table (eg from bootrom) */
+//    putreg32((uint32_t *) &spiromvector, NVIC_VECTAB);
+//    putreg32(0, NVIC_VECTAB);
+
     /*
      * Standby procedure must be copied to BufRam (BufRam not maintained)
      *
@@ -120,6 +126,9 @@ int tsb_pmstandby(void)
 
     /* Execute Standby procedure */
     up_standby_bufram();
+
+
+    while(1);
 
     irqrestore(flags);
     return OK;
