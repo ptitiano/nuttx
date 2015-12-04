@@ -39,6 +39,7 @@ SECTIONS
 
     .text : {
         _stext = ABSOLUTE(.);
+/*        KEEP(*(.pmresumesec)) */
         *(.vectors)
         KEEP(*(.text))
         *(.text.*)
@@ -101,10 +102,6 @@ SECTIONS
     _bootstrap_lma = LOADADDR(.bootstrap);
     _bootstrap_vma = ADDR(.bootstrap);
     _bootstrap_size = SIZEOF(.bootstrap);
-
-    .pmresumesec : {
-        *(.pmresumesec)
-    } > sram AT > rom
 
     /* Stabs debugging sections. */
     .stab 0 : { *(.stab) }
