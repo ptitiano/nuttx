@@ -198,8 +198,6 @@ resume_point:
     /* Restore Stack */
     ldr sp, stackptrcpy
 
-    b .
-
     /* Restore Reset Handler */
     ldr r1, resetvector
     ldr r2, resethdlrcpy
