@@ -44,7 +44,7 @@
 .thumb
 .section .asmpmsec, "ax"
 .file "tsb_pm_es2.S"
-.globl up_standby, asmpmsec_start, asmpmsec_sz, tsb_resume_addr
+.globl up_standby, asmpmsec_start, asmpmsec_sz
 
 
 /**
@@ -56,9 +56,27 @@ asmpmsec_start:
 .thumb_func
 .type up_standby, function
 up_standby:
-    /* Save the resume address (i.e. return address of the current function) */
-    ldr r1, resaddr
-    str lr, [r1]
+    /* Save registers */
+    push {r0-r12,lr}
+
+    /* Save stack */
+    ldr r1, =stackptrcpy
+    str sp, [r1]
+
+    /*
+     * After exiting from retention mode, Cortex-M3 jumps to the address which
+     * is specified by the value of byte offset 0x4 of the workram
+     * (address 0x10000004) and normal mode starts.
+     */
+    /* Save reset handler */
+    ldr r1, resetvector
+    ldr r1, [r1]
+    ldr r2, =resethdlrcpy
+    str r1, [r2]
+    /* Store resume address at workram address 0x10000004 */
+    ldr r1, resetvector
+    ldr r2, resume_addr
+    str r2, [r1]
 
     /* Standby Shutoff sequence, from ES3 specs rev100 section 4.1.4.4 */
     /* (0) Clear BOOTRET flag */
@@ -164,7 +182,37 @@ loop1_5us_done:
      */
     b .
 
+resume_point:
+    /* 6. Unlock latch state of IO cells via Iso_for_io_en register */
+    ldr r1, pmu_iso_for_io_en
+    ldr r0, pmu_iso_for_io_en_val
+    str r0, [r1]
+    mov r2, #7
+
+    /* 7. CLR BOOTRET = 0 */
+    ldr r1, pmu_bootret_o
+    ldr r0, pmu_bootret_o_val
+    str r0, [r1]
+    mov r2, #8
+
+    /* Restore Stack */
+    ldr sp, stackptrcpy
+
+    b .
+
+    /* Restore Reset Handler */
+    ldr r1, resetvector
+    ldr r2, resethdlrcpy
+    str r2, [r1]
+
+    /* Restore registers */
+    pop {r0-r12, lr}
+    bx lr
+
 .align 4
+
+stackptrcpy: /* Copy of the stack pointer, to be restored after standby boot */
+    .word 0xDEADBEEF
 
 delay1_5us_val: /* 1 loop = 3 CPU cycles, 1 CPU clock cycle = 10.4ns (@96MHz) */
     .word 50
@@ -199,14 +247,20 @@ pmu_iso_en:
 pmu_iso_en_val:
     .word 0x00000001
 
-resaddr:
-    .word tsb_resume_addr
+resetvector:
+    .word 0x10000004
+resethdlrcpy: /* Copy of the reset handler, to be restored after standby boot */
+    .word 0xDEADBEEF
+
+resume_addr: /* Address in workram where code shall resume after standby boot */
+    .word resume_point
+
 asmpmsec_sz:
     .word . - asmpmsec_start
 
-
+/*
 .section .pmresumesec, "w"
-.global tsb_resume_addr
 .align 4
-tsb_resume_addr:
-    .word 0xDEADBEEF
+    .word 0x2BE3ABBA
+    .word resume_point
+*/
