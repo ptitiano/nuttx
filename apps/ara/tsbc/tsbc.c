@@ -341,6 +341,7 @@ int tsbc_write_reg(const char *ip,
                    int op_argc, char **op_argv)
 {
     uint32_t addr, val;
+    int ret;
 
     if ((!ip) || (!regs) || (!count) ||
         (op_argc != 2) || (!op_argv)) {
@@ -361,7 +362,15 @@ int tsbc_write_reg(const char *ip,
 
     /* Write register content */
     dprintf("writing 0x%08X @ 0x%08X\n", val, addr);
-    return mem_write32(addr, val);
+    ret = mem_write32(addr, val);
+    if (ret) {
+        fprintf(stderr, "memory write operation failed!\n");
+        return -EIO;
+    } else {
+        /* Read register content */
+        printf("%08X\n", mem_read32(addr));
+        return 0;
+    }
 
 tsbc_write_reg_usage:
     printf("Invalid argument!\n");
@@ -403,6 +412,7 @@ int tsbc_get_bitmask(int op_argc, char **op_argv, uint32_t *mask)
 int tsbc_setclear_bits(uint32_t addr, uint32_t mask, unsigned char set)
 {
     uint32_t val;
+    int ret;
 
     /* Read register content */
     val = mem_read32(addr);
@@ -416,7 +426,15 @@ int tsbc_setclear_bits(uint32_t addr, uint32_t mask, unsigned char set)
     }
     dprintf("mask=0x%08X writing 0x%08X @ 0x%08X\n", mask, val, addr);
 
-    return mem_write32(addr, val);
+    ret = mem_write32(addr, val);
+    if (ret) {
+        fprintf(stderr, "memory write operation failed!\n");
+        return -EIO;
+    } else {
+        /* Read register content */
+        printf("%08X\n", mem_read32(addr));
+        return 0;
+    }
 }
 
 
