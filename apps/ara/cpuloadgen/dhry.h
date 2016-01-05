@@ -363,8 +363,8 @@
 
 #define Null 0
                 /* Value of a Null pointer */
-#define true  1
-#define false 0
+//#define true  1
+//#define false 0
 
 typedef int     One_Thirty;
 typedef int     One_Fifty;

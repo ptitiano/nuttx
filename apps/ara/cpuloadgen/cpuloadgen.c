@@ -45,8 +45,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <memory.h>
-#include "dhry.h"
+#include <string.h>
+#include <stdint.h>
 #include <sys/time.h>
 #include <time.h>
 #include <sys/types.h>
@@ -57,11 +57,13 @@
 #include <errno.h>
 #include <pthread.h>
 
+#include "dhry.h"
+
 #define CPULOADGEN_REVISION ((const char *) "0.94")
 
 
-/* #define DEBUG */
-#ifdef DEBUG
+#define CPULOADGEN_DEBUG
+#ifdef CPULOADGEN_DEBUG
 #define dprintf(format, ...)	 printf(format, ## __VA_ARGS__)
 #else
 #define dprintf(format, ...)
@@ -74,6 +76,8 @@
 #define REG register
 #endif
 
+#define USEC_PER_SEC    ((uint64_t) 1000000)
+
 /* Global Variables: */
 
 Rec_Pointer Ptr_Glob, Next_Ptr_Glob;
@@ -85,12 +89,8 @@ int Arr_2_Glob [50][50];
 
 char Reg_Define[] = "Register option selected.";
 
-Enumeration     Func_1();
+Enumeration Func_1();
 /* forward declaration necessary since Enumeration may not simply be int */
-
-extern char *builddate;
-extern double dtime();
-
 
 int cpu_count = -1;
 int *cpuloads = NULL;
@@ -99,7 +99,19 @@ pthread_t *threads = NULL;
 pthread_mutex_t mutex1 = PTHREAD_MUTEX_INITIALIZER;
 
 void dhryStone(unsigned int iterations);
-void loadgen(unsigned int cpu, unsigned int load, unsigned int duration);
+int loadgen(unsigned int cpu, unsigned int load, unsigned int duration);
+
+void Proc_1(Ptr_Val_Par);
+void Proc_2(Int_Par_Ref);
+void Proc_3(Ptr_Ref_Par);
+void Proc_4(void);
+void Proc_5(void);
+extern void Proc_6(Enum_Val_Par, Enum_Ref_Par);
+extern void Proc_7(Int_1_Par_Val, Int_2_Par_Val, Int_Par_Ref);
+extern void Proc_8(Arr_1_Par_Ref, Arr_2_Par_Ref, Int_1_Par_Val, Int_2_Par_Val);
+extern Enumeration Func_1(Ch_1_Par_Val, Ch_2_Par_Val);
+extern Boolean Func_2(Str_1_Par_Ref, Str_2_Par_Ref);
+extern Boolean Func_3(Enum_Par_Val);
 
 /* ------------------------------------------------------------------------*//**
  * @FUNCTION		usage
@@ -114,7 +126,7 @@ static void usage(void)
 	printf("Load is a percentage which may be any integer value between 1 and 100.\n");
 	printf("Duration time unit is seconds.\n");
 	printf("Arguments may be provided in any order.\n");
-	printf("If duration is omitted, generate load(s) until CTRL+C is pressed.\n");
+	printf("If duration is omitted, generate load(s) endlessly.\n");
 	printf("If no argument is given, generate 100%% load on all online CPU cores indefinitely.\n\n");
 	printf("e.g.:\n");
 	printf(" - Generate 100%% load on all online CPU cores until CTRL+C is pressed:\n");
@@ -166,8 +178,6 @@ static int einval(const char *arg)
  *//*------------------------------------------------------------------------ */
 void sigterm_handler(void)
 {
-	unsigned int i;
-
 	printf("Halting load generation...\n");
 	fflush(stdout);
 
@@ -211,28 +221,22 @@ void *thread_loadgen(void *ptr)
  * @param[in, out]	argv: shell input argument(s)
  * @DESCRIPTION		main entry point
  *//*------------------------------------------------------------------------ */
-int main(int argc, char *argv[])
+#ifdef CONFIG_BUILD_KERNEL
+int main(int argc, FAR char *argv[])
+#else
+int cpuloadgen_main(int argc, char *argv[])
+#endif
 {
-	unsigned int cpu0load, cpu1load, cpu2load, cpu3load;
-	int i, ret, n, load;
+	int i, ret, load;
 	long int duration2;
 
-	/*
-	 * Register signal handler in order to be able to
-	 * kill child process if user kills parent process
-	 */
-	signal(SIGTERM, (sighandler_t) sigterm_handler);
-
-	printf("CPULOADGEN (REV %s built %s)\n\n",
-		CPULOADGEN_REVISION, builddate);
-
-	cpu_count = (int) sysconf(_SC_NPROCESSORS_ONLN);
-	if (cpu_count < 1) {
-		fprintf(stderr, "cpuloadgen: could not determine CPU cores count!!! (%d)\n",
-			cpu_count);
-		return cpu_count;
-	}
+	cpu_count = 1;
 	dprintf("main: found %d CPU cores.\n", cpu_count);
+	if (argc > cpu_count + 2) {
+		fprintf(stderr, "cpuloadgen: too many arguments!\n\n");
+		usage();
+		return -EINVAL;
+	}
 
 	/* Allocate buffers */
 	threads = malloc(cpu_count * sizeof(pthread_t));
@@ -241,63 +245,34 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "cpuloadgen: could not allocate buffers!!!\n");
 		return -ENOMEM;
 	}
+
 	/* Initialize variables */
-	if (argc == 1) {
-		/* No user arguments, use default */
-		for (i = 0; i < cpu_count; i++) {
-			threads[i] = -1;
-			cpuloads[i] = 100;
-		}
-		duration = -1;
-	} else {
-		for (i = 0; i < cpu_count; i++) {
-			threads[i] = -1;
-			cpuloads[i] = -1;
-		}
-		duration = -1;
-
-		/* Parse arguments */
-		for (i = 1; i < argc; i++) {
-			dprintf("main: argv[i]=%s\n", argv[i]);
-			if (argv[i][0] == 'c') {
-				ret = sscanf(argv[i], "cpu%d=%d", &n, &load);
-				if ((ret != 2) ||
-					((n < 0) || (n >= cpu_count)) ||
-					((load < 1) || (load > 100)))
-					return einval(argv[i]);
-				if (cpuloads[n] != -1) {
-					fprintf(stderr,
-						"cpuloadgen: CPU%d was already assigned a load of %d!\n\n",
-						n, cpuloads[n]);
-					free_buffers();
-					return -EINVAL;
-				}
-				cpuloads[n] = load;
-				dprintf("Load assigned to CPU%d: %d%%\n",
-					n, cpuloads[n]);
-			} else if (argv[i][0] == 'd') {
-				ret = sscanf(argv[i], "duration=%ld",
-					&duration2);
-				if ((ret != 1) || (duration2 < 1)) {
-					return einval(argv[i]);
-				}
-				if (duration != -1) {
-					fprintf(stderr,
-						"cpuloadgen: duration was already set to %ld!\n\n",
-						duration);
-					free_buffers();
-					return -EINVAL;
-				}
-				duration = duration2;
-				dprintf("Duration of the load generation: %lds\n",
-					duration);
-			} else {
-				return einval(argv[i]);
-			}
-		}
+	for (i = 0; i < cpu_count; i++) {
+		threads[i] = -1;
+		cpuloads[i] = 100;
 	}
+	duration = -1;
 
-	printf("Press CTRL+C to stop load generation at any time.\n\n");
+	/* Parse user arguments */
+	if (argc >= 2) {
+		dprintf("main: argv[1]=%s\n", argv[1]);
+		ret = sscanf(argv[i], "%d", &load);
+		if ((ret != 1) ||
+			(load < 1) || (load > 100)) {
+			return einval(argv[0]);
+		}
+		cpuloads[0] = load;
+		dprintf("Load assigned to CPU0: %d%%\n", cpuloads[0]);
+	}
+	if (argc == 3) {
+		dprintf("main: argv[2]=%s\n", argv[2]);
+		ret = sscanf(argv[2], "%ld", &duration2);
+		if ((ret != 1) || (duration2 < 1)) {
+			return einval(argv[2]);
+		}
+		duration = duration2;
+		dprintf("Duration of the load generation: %lds\n", duration);
+	}
 
 	/* Start load generation on cores accordingly */
 	for (i = 0; i < cpu_count; i++) {
@@ -337,109 +312,116 @@ int main(int argc, char *argv[])
 
 /* ------------------------------------------------------------------------*//**
  * @FUNCTION		loadgen
- * @BRIEF		Programmable CPU load generator
- * @RETURNS		0 on success
- *			OMAPCONF_ERR_CPU
- *			OMAPCONF_ERR_ARG
- *			OMAPCONF_ERR_REG_ACCESS
+ * @BRIEF           Programmable CPU load generator
+ * @RETURNS         0, -EINVAL otherwise
  * @param[in]		cpu: target CPU core ID (loaded CPU core)
  * @param[in]		load: load to generate on that CPU ([1-100])
  * @param[in]		duration: how long this CPU core shall be loaded
- *				(in seconds)
+ *                  (in seconds)
  * @DESCRIPTION		Programmable CPU load generator. Use Dhrystone loops
- *			to generate load, and apply PWM (Pulse Width Modulation)
- *			principle on it to make average CPU load vary between
- *			0 and 100%
+ *                  to generate load, and apply PWM (Pulse Width Modulation)
+ *                  principle on it to make average CPU load vary between
+ *                  0 and 100%
  *//*------------------------------------------------------------------------ */
-void loadgen(unsigned int cpu, unsigned int load, unsigned int duration)
+int loadgen(unsigned int cpu, unsigned int load, unsigned int duration)
 {
-	double dhrystone_start_time, dhrystone_end_time;
-	double idle_time_us;
-	double loadgen_start_time_us, active_time_us;
-	double total_time_us;
-	struct timeval tv_cpuloadgen_start, tv_cpuloadgen;
-	struct timeval tv_idle_start, tv_idle_stop;
-	struct timezone tz;
-	double time_us;
-	unsigned long mask;
-	unsigned int len = sizeof(mask);
-	cpu_set_t set;
+	struct timeval tv_loadgen_start, tv_loadgen_now, tv_loadgen_time;
+	struct timeval tv_dhry_start, tv_dhry_end, tv_dhry_time;
+    uint64_t dhry_time_usec, total_time_usec, idle_time_usec;
+    #ifdef CPULOADGEN_DEBUG
+    struct timeval tv_idle_start, tv_idle_end, tv_idle_time;
+    unsigned int real_cpu_load;
+    uint64_t real_idle_time_usec;
+    #endif
 
-	CPU_ZERO(&set);
-	CPU_SET(cpu, &set);
-	sched_setaffinity(0, len, &set);
-	printf("Generating %3d%% load on CPU%d...\n", load, cpu);
+    if ((!load) || (!duration)) {
+        return -EINVAL;
+    }
 
-	gettimeofday(&tv_cpuloadgen_start, &tz);
-	loadgen_start_time_us = ((double) tv_cpuloadgen_start.tv_sec
-		+ ((double) tv_cpuloadgen_start.tv_usec * 1.0e-6));
-	dprintf("%s(): CPU%d start time: %fus\n", __func__,
-		cpu, loadgen_start_time_us);
+	printf("Generating %3u%% load on CPU%u...\n", load, cpu);
+	gettimeofday(&tv_loadgen_start, NULL);
+	dprintf("%s(): CPU%u start time: %luus %luus\n", __func__,
+		cpu, tv_loadgen_start.tv_sec, tv_loadgen_start.tv_usec);
+
 
 	if (load != 100) {
 		while (1) {
 			/* Generate load (100%) */
-			dhrystone_start_time = dtime();
-			dhryStone(200000);
-			dhrystone_end_time = dtime();
-			active_time_us =
-				(dhrystone_end_time - dhrystone_start_time) * 1.0e6;
-			dprintf("%s(): CPU%d running time: %dus\n", __func__,
-				cpu, (unsigned int) active_time_us);
+			gettimeofday(&tv_dhry_start, NULL);
+            printf("1\n");
+            fflush(stdout);
+			dhryStone(10);
+            printf("2\n");
+            fflush(stdout);
+			gettimeofday(&tv_dhry_end, NULL);
+
+            timersub(&tv_dhry_end, &tv_dhry_start, &tv_dhry_time);
+            dhry_time_usec = tv_dhry_time.tv_usec;
+            dhry_time_usec += tv_dhry_time.tv_sec * USEC_PER_SEC;
+			dprintf("%s(): CPU%u dhrystone run time: %luus\n", __func__,
+                    cpu, dhry_time_usec);
 
 			/* Compute needed idle time */
-			total_time_us =
-				active_time_us * (100.0 / (double) (load + 1));
-			dprintf("%s(): CPU%d total time: %dus\n", __func__, cpu,
-				(unsigned int) total_time_us);
-			idle_time_us = total_time_us - active_time_us;
-			dprintf("%s(): CPU%d computed idle_time_us = %dus\n",
-				__func__, cpu, (unsigned int) idle_time_us);
+            total_time_usec = dhry_time_usec;
+            total_time_usec *= (100 * 100) / (load + 1);
+            total_time_usec /= 100;
+			dprintf("%s(): CPU%u total time: %luus\n", __func__, cpu,
+				    total_time_usec);
+			idle_time_usec = total_time_usec - dhry_time_usec;
+			dprintf("%s(): CPU%u computed idle time: %luus\n",
+                    __func__, cpu, idle_time_usec);
 
 			/* Generate idle time */
-			#ifdef DEBUG
-			gettimeofday(&tv_idle_start, &tz);
+			#ifdef CPULOADGEN_DEBUG
+			gettimeofday(&tv_idle_start, NULL);
 			#endif
-			usleep((unsigned int) (idle_time_us));
-			#ifdef DEBUG
-			gettimeofday(&tv_idle_stop, &tz);
-			idle_time_us = 1.0e6 * (
-				((double) tv_idle_stop.tv_sec +
-				((double) tv_idle_stop.tv_usec * 1.0e-6))
-				- ((double) tv_idle_start.tv_sec +
-				((double) tv_idle_start.tv_usec * 1.0e-6)));
-			dprintf("%s(): CPU%d effective idle time: %dus\n",
-				__func__, cpu, (unsigned int) idle_time_us);
-			dprintf("%s(): CPU%d effective CPU Load: %d%%\n",
-				__func__, cpu,
-				(unsigned int) (100.0 * (active_time_us /
-				(active_time_us + idle_time_us))));
+			usleep(idle_time_usec);
+			#ifdef CPULOADGEN_DEBUG
+			gettimeofday(&tv_idle_end, NULL);
+            timersub(&tv_idle_end, &tv_idle_start, &tv_idle_time);
+            real_idle_time_usec = tv_idle_time.tv_usec;
+            real_idle_time_usec += tv_idle_time.tv_sec * USEC_PER_SEC;
+			dprintf("%s(): CPU%u effective idle time: %luus\n",
+				    __func__, cpu, real_idle_time_usec);
+            real_cpu_load = (100 * dhry_time_usec);
+            real_cpu_load /= (dhry_time_usec + real_idle_time_usec);
+			dprintf("%s(): CPU%u effective CPU Load: %u%%\n",
+				    __func__, cpu, real_cpu_load);
+            if (real_cpu_load != load) {
+                printf("Warning: CPU%u: generated %u%% load instead of %u%%\n",
+                       cpu, real_cpu_load, load);
+            }
 			#endif
-			gettimeofday(&tv_cpuloadgen, &tz);
-			time_us = ((double) tv_cpuloadgen.tv_sec
-				+ ((double) tv_cpuloadgen.tv_usec * 1.0e-6));
-			dprintf("%s(): CPU%d elapsed time: %fs\n",
-				__func__, cpu,
-				time_us - loadgen_start_time_us);
-			if ((duration != 0) &&
-				(time_us - loadgen_start_time_us) >= duration)
-				break;
+
+            gettimeofday(&tv_loadgen_now, NULL);
+            timersub(&tv_loadgen_now, &tv_loadgen_start, &tv_loadgen_time);
+            #ifdef CPULOADGEN_DEBUG
+            dprintf("%s(): CPU%u elapsed time: %lus %luus\n", __func__,
+                    cpu, tv_loadgen_time.tv_sec, tv_loadgen_time.tv_usec);
+            #endif
+            if (tv_loadgen_time.tv_sec >= duration) {
+                break;
+            }
 		}
 	} else {
+            printf("la\n");
+            return 0;
 		while (1) {
 			dhryStone(1000000);
-			gettimeofday(&tv_cpuloadgen, &tz);
-			time_us = ((double) tv_cpuloadgen.tv_sec
-				+ ((double) tv_cpuloadgen.tv_usec * 1.0e-6));
-			dprintf("%s(): CPU%d elapsed time: %fs\n", __func__,
-				cpu, time_us - loadgen_start_time_us);
-			if ((duration != 0) &&
-				(time_us - loadgen_start_time_us) >= duration)
-				break;
+			gettimeofday(&tv_loadgen_now, NULL);
+			timersub(&tv_loadgen_now, &tv_loadgen_start, &tv_loadgen_time);
+            #ifdef CPULOADGEN_DEBUG
+            dprintf("%s(): CPU%u elapsed time: %lus %luus\n", __func__,
+                    cpu, tv_loadgen_time.tv_sec, tv_loadgen_time.tv_usec);
+            #endif
+            if (tv_loadgen_time.tv_sec >= duration) {
+                break;
+            }
 		}
 	}
 
-	dprintf("Load Generation on CPU%d completed.\n", cpu);
+	dprintf("Load Generation on CPU%u completed.\n", cpu);
+    return 0;
 }
 
 
@@ -454,9 +436,6 @@ void dhryStone(unsigned int iterations)
 	Str_30 Str_2_Loc;
 	REG int Run_Index;
 	REG int Number_Of_Runs;
-
-	FILE *Ap;
-	unsigned int mrcData;
 
 	Next_Ptr_Glob = (Rec_Pointer) malloc(sizeof(Rec_Type));
 	Ptr_Glob = (Rec_Pointer) malloc(sizeof (Rec_Type));
@@ -519,7 +498,7 @@ void dhryStone(unsigned int iterations)
 }
 
 
-Proc_1 (Ptr_Val_Par)
+void Proc_1(Ptr_Val_Par)
 /******************/
 
 REG Rec_Pointer Ptr_Val_Par;
@@ -552,7 +531,7 @@ REG Rec_Pointer Ptr_Val_Par;
     structassign (*Ptr_Val_Par, *Ptr_Val_Par->Ptr_Comp);
 } /* Proc_1 */
 
-Proc_2 (Int_Par_Ref)
+void Proc_2(Int_Par_Ref)
 /******************/
     /* executed once */
     /* *Int_Par_Ref == 1, becomes 4 */
@@ -575,7 +554,7 @@ One_Fifty   *Int_Par_Ref;
 } /* Proc_2 */
 
 
-Proc_3 (Ptr_Ref_Par)
+void Proc_3(Ptr_Ref_Par)
 /******************/
     /* executed once */
     /* Ptr_Ref_Par becomes Ptr_Glob */
@@ -590,7 +569,7 @@ Rec_Pointer *Ptr_Ref_Par;
 } /* Proc_3 */
 
 
-Proc_4 () /* without parameters */
+void Proc_4(void) /* without parameters */
 /*******/
     /* executed once */
 {
@@ -602,7 +581,7 @@ Proc_4 () /* without parameters */
 } /* Proc_4 */
 
 
-Proc_5 () /* without parameters */
+void Proc_5(void) /* without parameters */
 /*******/
     /* executed once */
 {
