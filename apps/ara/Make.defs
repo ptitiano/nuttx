@@ -154,3 +154,7 @@ endif
 ifeq ($(CONFIG_ARA_VERSION),y)
 CONFIGURED_APPS += ara/version
 endif
+
+ifeq ($(CONFIG_ARA_CPULOADGEN),y)
+CONFIGURED_APPS += ara/cpuloadgen
+endif
